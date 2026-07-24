@@ -6,4 +6,5 @@ duckdb_extension_load(toml
 )
 
 # Any extra extensions that should be built
-# e.g.: duckdb_extension_load(json)
+# json is included so tests can exercise ->, ->> and friends on parse_toml's output
+duckdb_extension_load(json)

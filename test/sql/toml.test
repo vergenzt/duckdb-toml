@@ -1,23 +1,114 @@
 # name: test/sql/toml.test
-# description: test toml extension
+# description: test parse_toml
 # group: [sql]
 
 # Before we load the extension, this will fail
 statement error
-SELECT toml('Sam');
+SELECT parse_toml('key = "value"');
 ----
-Catalog Error: Scalar Function with name toml does not exist!
+Catalog Error: Scalar Function with name parse_toml does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
 require toml
 
-# Confirm the extension works
-query I
-SELECT toml('Sam');
-----
-...........🦆 Sam
+require json
 
+# Basic key/value
 query I
-SELECT toml_openssl_version('Michael') ILIKE 'Toml Michael, my linked OpenSSL version is OpenSSL%';
+SELECT parse_toml('key = "value"');
 ----
-true
+{"key":"value"}
+
+# Result is the JSON logical type, not plain VARCHAR
+query I
+SELECT typeof(parse_toml('key = "value"'));
+----
+JSON
+
+# NULL in, NULL out
+query I
+SELECT parse_toml(NULL);
+----
+NULL
+
+# Empty document is an empty object
+query I
+SELECT parse_toml('');
+----
+{}
+
+# Invalid TOML fails loudly with the parser's message
+statement error
+SELECT parse_toml('key = ');
+----
+Invalid TOML at line 1
+
+# Integers stay integers, floats stay floats (note: toml++ emits table keys sorted)
+query I
+SELECT parse_toml('int = 42
+float = 42.0
+pi = 3.14159');
+----
+{"float":42.0,"int":42,"pi":3.14159}
+
+# Non-finite floats become JSON strings that still cast to DOUBLE
+query III
+WITH t AS (SELECT parse_toml('a = inf
+b = -inf
+c = nan') AS cfg)
+SELECT (cfg->>'a')::DOUBLE, (cfg->>'b')::DOUBLE, isnan((cfg->>'c')::DOUBLE) FROM t;
+----
+inf	-inf	true
+
+# Booleans, arrays, nested and inline tables, array of tables
+query I
+SELECT parse_toml('enabled = true
+ports = [8000, 8001]
+point = { x = 1, y = 2 }
+[server]
+host = "localhost"
+[[jobs]]
+name = "a"
+[[jobs]]
+name = "b"');
+----
+{"enabled":true,"jobs":[{"name":"a"},{"name":"b"}],"point":{"x":1,"y":2},"ports":[8000,8001],"server":{"host":"localhost"}}
+
+# Strings are JSON-escaped
+query I
+SELECT parse_toml('s = "quote \" backslash \\ newline \n tab \t"');
+----
+{"s":"quote \" backslash \\ newline \n tab \t"}
+
+# TOML datetimes/dates/times become RFC 3339 strings
+query I
+SELECT parse_toml('odt = 1979-05-27T07:32:00Z
+odt_offset = 1979-05-27T00:32:00.999999-07:00
+ldt = 1979-05-27T07:32:00
+ld = 1979-05-27
+lt = 07:32:00');
+----
+{"ld":"1979-05-27","ldt":"1979-05-27T07:32:00","lt":"07:32:00","odt":"1979-05-27T07:32:00Z","odt_offset":"1979-05-27T00:32:00.999999-07:00"}
+
+# ...and cast cleanly to temporal types
+query IIII
+WITH t AS (SELECT parse_toml('odt = 1979-05-27T00:32:00-07:00
+ldt = 1979-05-27T07:32:00
+ld = 1979-05-27
+lt = 07:32:00') AS cfg)
+SELECT (cfg->>'odt')::TIMESTAMPTZ = '1979-05-27 07:32:00+00'::TIMESTAMPTZ,
+       (cfg->>'ldt')::TIMESTAMP,
+       (cfg->>'ld')::DATE,
+       (cfg->>'lt')::TIME
+FROM t;
+----
+true	1979-05-27 07:32:00	1979-05-27	07:32:00
+
+# JSON operators work directly on the result, no cast needed
+query II
+WITH t AS (SELECT parse_toml('[server]
+host = "localhost"
+port = 5432') AS cfg)
+SELECT cfg->'server'->>'host', (cfg->'server'->'port')::INT FROM t;
+----
+localhost	5432

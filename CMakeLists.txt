@@ -3,11 +3,6 @@ cmake_minimum_required(VERSION 3.5)
 # Set extension name here
 set(TARGET_NAME toml)
 
-# DuckDB's extension distribution supports vcpkg. As such, dependencies can be added in ./vcpkg.json and then
-# used in cmake with find_package. Feel free to remove or replace with other dependencies.
-# Note that it should also be removed from vcpkg.json to prevent needlessly installing it..
-find_package(OpenSSL REQUIRED)
-
 set(EXTENSION_NAME ${TARGET_NAME}_extension)
 set(LOADABLE_EXTENSION_NAME ${TARGET_NAME}_loadable_extension)
 
@@ -17,15 +12,22 @@ set(CMAKE_CXX_STANDARD "17" CACHE STRING "C++ standard to enforce")
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(src/include)
+# Vendored single-header toml++ (https://github.com/marzer/tomlplusplus)
+include_directories(third_party/tomlplusplus)
 
 set(EXTENSION_SOURCES src/toml_extension.cpp)
 
 build_static_extension(${TARGET_NAME} ${EXTENSION_SOURCES})
 build_loadable_extension(${TARGET_NAME} " " ${EXTENSION_SOURCES})
 
-# Link OpenSSL in both the static library as the loadable extension
-target_link_libraries(${EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
-target_link_libraries(${LOADABLE_EXTENSION_NAME} OpenSSL::SSL OpenSSL::Crypto)
+# toml++ requires C++17; DuckDB's build system defaults extensions to its own (older)
+# standard, so force it at the target level
+set_target_properties(${EXTENSION_NAME} ${LOADABLE_EXTENSION_NAME}
+                      PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+
+# JSON output is serialized with DuckDB's embedded yyjson; the static extension gets it
+# from DuckDB core, the loadable extension links it explicitly (same as extension/json)
+target_link_libraries(${LOADABLE_EXTENSION_NAME} duckdb_yyjson)
 
 install(
   TARGETS ${EXTENSION_NAME}
