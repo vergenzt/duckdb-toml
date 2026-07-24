@@ -1,6 +1,9 @@
 # duckdb-toml
 
-A DuckDB extension for reading TOML. It provides a single scalar function, `parse_toml(VARCHAR) → JSON`:
+A DuckDB extension for reading TOML. It provides a single scalar function, `parse_toml(VARCHAR) → JSON`.
+
+> [!note]
+> **AI Disclosure**: *This extension was written substantially by LLM (Claude Fable), with significant review/revision from the human author.*
 
 ## Usage
 
