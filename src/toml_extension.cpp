@@ -112,13 +112,12 @@ void ParseTomlFun(DataChunk &args, ExpressionState &state, Vector &result) {
 			table = toml::parse(std::string_view(input.GetData(), input.GetSize()));
 		} catch (const toml::parse_error &err) {
 			auto &region = err.source();
-			throw InvalidInputException("Invalid TOML at line %llu, column %llu: %s",
-			                            static_cast<unsigned long long>(region.begin.line),
-			                            static_cast<unsigned long long>(region.begin.column),
-			                            std::string(err.description()));
+			throw InvalidInputException(
+			    "Invalid TOML at line %llu, column %llu: %s", static_cast<unsigned long long>(region.begin.line),
+			    static_cast<unsigned long long>(region.begin.column), std::string(err.description()));
 		}
 		std::unique_ptr<yyjson_mut_doc, decltype(&yyjson_mut_doc_free)> doc(yyjson_mut_doc_new(nullptr),
-		                                                                   yyjson_mut_doc_free);
+		                                                                    yyjson_mut_doc_free);
 		yyjson_mut_doc_set_root(doc.get(), TomlToJson(doc.get(), table));
 		size_t len;
 		char *json = yyjson_mut_write(doc.get(), 0, &len);
