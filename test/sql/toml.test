@@ -1,0 +1,23 @@
+# name: test/sql/toml.test
+# description: test toml extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT toml('Sam');
+----
+Catalog Error: Scalar Function with name toml does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require toml
+
+# Confirm the extension works
+query I
+SELECT toml('Sam');
+----
+...........🦆 Sam
+
+query I
+SELECT toml_openssl_version('Michael') ILIKE 'Toml Michael, my linked OpenSSL version is OpenSSL%';
+----
+true
